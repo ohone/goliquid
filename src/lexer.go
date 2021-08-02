@@ -25,31 +25,31 @@ type lexer struct {
 	state stateFn
 }
 
-func LexLeftMeta(l *lexer) stateFn {
+func lexLeftMeta(l *lexer) stateFn {
 	l.pos += len(openDelimiter)
 	l.emit(false)
-	return LexInsideTemplate // {{}}
+	return lexInsideTemplate // {{}}
 }
 
-func LexRightMeta(l *lexer) stateFn {
+func lexRightMeta(l *lexer) stateFn {
 	l.pos += len(closeDelimiter)
 	l.emit(false)
-	return LexText
+	return lexText
 }
 
-func LexText(l *lexer) stateFn {
+func lexText(l *lexer) stateFn {
 	for { // loop
 		if strings.HasPrefix(l.input[l.pos:], openDelimiter) { // if we're starting a token
 			if l.pos > l.start { // emit previous tokens as plain text
 				l.emit(false)
 			}
-			return LexLeftMeta // return next state
+			return lexLeftMeta // return next state
 		}
 		l.next()
 	}
 }
 
-func LexInsideTemplate(l *lexer) stateFn {
+func lexInsideTemplate(l *lexer) stateFn {
 	for { // loop
 		if strings.HasPrefix(l.input[l.pos:], closeDelimiter) {
 			if l.pos > l.start {
@@ -65,7 +65,7 @@ func LexInsideTemplate(l *lexer) stateFn {
 				return l.errorf("object template must finish with closing delimiter `}}`")
 			}
 
-			return LexRightMeta
+			return lexRightMeta
 		}
 	}
 }
@@ -145,7 +145,7 @@ func Lex(name, input string) *lexer {
 		name:  name,
 		input: input,
 		items: make(chan lexeme, 2), // refactor - no need to use channel, by-hand ring buffer would be better. this is no longer goroutine-y so channel is overhead when a linear datastructure would do the same job
-		state: LexText,
+		state: lexText,
 	}
 
 	return l
