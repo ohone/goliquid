@@ -1,4 +1,4 @@
-package templater
+package lexer
 
 import (
 	"fmt"
@@ -9,9 +9,9 @@ import (
 const openDelimiter = "{{"
 const closeDelimiter = "}}"
 
-type lexeme struct {
-	templatable bool
-	token       string
+type Lexeme struct {
+	Templatable bool
+	Token       string
 }
 
 type stateFn func(*lexer) stateFn
@@ -21,7 +21,7 @@ type lexer struct {
 	start int         // start position of this item
 	pos   int         // current position in the input
 	width int         // width of the last run read
-	items chan lexeme // channel of scanned items
+	items chan Lexeme // channel of scanned items
 	state stateFn
 }
 
@@ -45,8 +45,13 @@ func lexText(l *lexer) stateFn {
 			}
 			return lexLeftMeta // return next state
 		}
-		l.next()
+		nextchar := l.next()
+		if nextchar == '_' {
+			l.emit(false)
+			break
+		}
 	}
+	return nil
 }
 
 func lexInsideTemplate(l *lexer) stateFn {
@@ -56,18 +61,24 @@ func lexInsideTemplate(l *lexer) stateFn {
 				l.emit(true)
 			}
 
+			fmt.Printf(l.input[l.pos:])
 			if !l.accept("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ") {
 				return l.errorf("object to template must be alphanumeric")
 			}
 			l.acceptRun("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ")
-
 			if !strings.HasPrefix(l.input[l.pos:], closeDelimiter) {
 				return l.errorf("object template must finish with closing delimiter `}}`")
 			}
 
 			return lexRightMeta
 		}
+		nextchar := l.next()
+		if nextchar == '_' {
+			l.emit(false)
+			break
+		}
 	}
+	return nil
 }
 
 func (l *lexer) next() (rune rune) {
@@ -124,11 +135,11 @@ func (l *lexer) peek() rune {
 }
 
 func (l *lexer) emit(template bool) {
-	l.items <- lexeme{template, l.input[l.start:l.pos]} // send token to parser
+	l.items <- Lexeme{template, l.input[l.start:l.pos]} // send token to parser
 	l.start = l.pos                                     // update position
 }
 
-func (l *lexer) NextLexeme() lexeme {
+func (l *lexer) NextLexeme() Lexeme {
 	for {
 		select {
 		case lexeme := <-l.items: // if item can be recieved from channel (will halt here if nothing to recieve)
@@ -144,7 +155,7 @@ func Lex(name, input string) *lexer {
 	l := &lexer{
 		name:  name,
 		input: input,
-		items: make(chan lexeme, 2), // refactor - no need to use channel, by-hand ring buffer would be better. this is no longer goroutine-y so channel is overhead when a linear datastructure would do the same job
+		items: make(chan Lexeme, 2), // refactor - no need to use channel, by-hand ring buffer would be better. this is no longer goroutine-y so channel is overhead when a linear datastructure would do the same job
 		state: lexText,
 	}
 
