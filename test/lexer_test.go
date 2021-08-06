@@ -1,30 +1,51 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/ohone/goliquid/lexer"
 )
 
-func TestLex(t *testing.T) {
-	b := lexer.Lex("name", "stringlol")
+func TestLexesString(t *testing.T) {
+	const strVal = "stringlol"
+	b := lexer.Lex("name", strVal)
 	eme := b.NextLexeme()
-	fmt.Printf(eme.Token)
 	if eme.Templatable {
 		t.Error()
 	}
+	if eme.Token != strVal {
+		t.Error()
+	}
 }
-func TestLexTemplateable(t *testing.T) {
+
+func TestLexesTemplateLexemesHaveCorrectTemplatability(t *testing.T) {
 	b := lexer.Lex("name", "{{hello}}")
 	eme := b.NextLexeme()
-	fmt.Printf(eme.Token)
-	eme2 := b.NextLexeme()
-	fmt.Printf(eme2.Token)
-	eme3 := b.NextLexeme()
-	fmt.Printf(eme3.Token)
-
 	if eme.Templatable {
 		t.Error()
+	}
+	eme2 := b.NextLexeme()
+	if !eme2.Templatable {
+		t.Error()
+	}
+	eme3 := b.NextLexeme()
+	if eme3.Templatable {
+		t.Error()
+	}
+}
+
+func TestLexesTemplateLexemesHaveCorrectTokenValue(t *testing.T) {
+	b := lexer.Lex("name", "{{hello}}")
+	eme := b.NextLexeme()
+	if eme.Token != "{{" {
+		t.Error("Expected first emitted token to be opening delimeter")
+	}
+	eme2 := b.NextLexeme()
+	if eme2.Token != "hello" {
+		t.Error("Expected second emitted token to be `hello`.")
+	}
+	eme3 := b.NextLexeme()
+	if eme3.Token != "}}" {
+		t.Error("Expected third emitted token to be closing delimeter.")
 	}
 }

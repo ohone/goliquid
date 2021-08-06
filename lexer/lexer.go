@@ -6,8 +6,9 @@ import (
 	"unicode/utf8"
 )
 
-const openDelimiter = "{{"
-const closeDelimiter = "}}"
+const openDelimeter = "{{"
+const closeDelimeter = "}}"
+const eof = '_'
 
 type Lexeme struct {
 	Templatable bool
@@ -26,27 +27,27 @@ type lexer struct {
 }
 
 func lexLeftMeta(l *lexer) stateFn {
-	l.pos += len(openDelimiter)
+	l.pos += len(openDelimeter)
 	l.emit(false)
 	return lexInsideTemplate // {{}}
 }
 
 func lexRightMeta(l *lexer) stateFn {
-	l.pos += len(closeDelimiter)
+	l.pos += len(closeDelimeter)
 	l.emit(false)
 	return lexText
 }
 
 func lexText(l *lexer) stateFn {
 	for { // loop
-		if strings.HasPrefix(l.input[l.pos:], openDelimiter) { // if we're starting a token
+		if strings.HasPrefix(l.input[l.pos:], openDelimeter) { // if we're starting a token
 			if l.pos > l.start { // emit previous tokens as plain text
 				l.emit(false)
 			}
 			return lexLeftMeta // return next state
 		}
 		nextchar := l.next()
-		if nextchar == '_' {
+		if nextchar == eof {
 			l.emit(false)
 			break
 		}
@@ -55,30 +56,27 @@ func lexText(l *lexer) stateFn {
 }
 
 func lexInsideTemplate(l *lexer) stateFn {
-	for { // loop
-		if strings.HasPrefix(l.input[l.pos:], closeDelimiter) {
-			if l.pos > l.start {
-				l.emit(true)
-			}
-
-			fmt.Printf(l.input[l.pos:])
-			if !l.accept("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ") {
-				return l.errorf("object to template must be alphanumeric")
-			}
-			l.acceptRun("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ")
-			if !strings.HasPrefix(l.input[l.pos:], closeDelimiter) {
-				return l.errorf("object template must finish with closing delimiter `}}`")
-			}
-
-			return lexRightMeta
-		}
-		nextchar := l.next()
-		if nextchar == '_' {
-			l.emit(false)
-			break
-		}
+	if strings.HasPrefix(l.input[l.pos:], closeDelimeter) {
+		return lexRightMeta
 	}
-	return nil
+
+	// if first character in template isn't alphanumeric
+	if !l.accept("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ") {
+		return l.errorf("object to template must be alphanumeric")
+	}
+	// move cursor to the end of alphanumeric string
+	l.acceptRun("abcdefhijklmnopqrstuvwxyzABCDEFHIJKLMNOPQRSTUVWXYZ")
+
+	// if we haven't hit a close delimeter
+	if !strings.HasPrefix(l.input[l.pos:], closeDelimeter) {
+		return l.errorf("object template must finish with closing delimeter `}}`")
+	}
+
+	// emit templateable token
+	l.emit(true)
+
+	// lex close delimeter
+	return lexRightMeta
 }
 
 func (l *lexer) next() (rune rune) {
