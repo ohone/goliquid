@@ -137,6 +137,7 @@ func (l *lexer) emit(template bool) {
 	l.start = l.pos                                     // update position
 }
 
+// Get the next lexeme from the text.
 func (l *lexer) NextLexeme() Lexeme {
 	for {
 		select {
@@ -148,6 +149,7 @@ func (l *lexer) NextLexeme() Lexeme {
 	}
 }
 
+// Create a lexer for the input text.
 // TODO: take reader instead of string
 func Lex(name, input string) *lexer {
 	l := &lexer{
