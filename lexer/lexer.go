@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -13,6 +12,7 @@ const eof = '_'
 type Lexeme struct {
 	Templatable bool
 	Token       string
+	Error       bool
 }
 
 type stateFn func(*lexer) stateFn
@@ -69,6 +69,7 @@ func lexInsideTemplate(l *lexer) stateFn {
 
 	// if we haven't hit a close delimeter
 	if !strings.HasPrefix(l.input[l.pos:], closeDelimeter) {
+		l.emit(true)
 		return l.errorf("object template must finish with closing delimeter `}}`")
 	}
 
@@ -108,10 +109,11 @@ func (l *lexer) acceptRun(charset string) {
 	}
 }
 
+// Error token on the channel, nil function.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	// TODO: return an error token rather than printing to console
-	// requires that emit takes a type rather than a bool
-	println(fmt.Sprintf(format, args...))
+	l.items <- Lexeme{
+		Error: true,
+	}
 	return nil
 }
 
@@ -133,8 +135,8 @@ func (l *lexer) peek() rune {
 }
 
 func (l *lexer) emit(template bool) {
-	l.items <- Lexeme{template, l.input[l.start:l.pos]} // send token to parser
-	l.start = l.pos                                     // update position
+	l.items <- Lexeme{template, l.input[l.start:l.pos], false} // send token to parser
+	l.start = l.pos                                            // update position
 }
 
 // Get the next lexeme from the text.

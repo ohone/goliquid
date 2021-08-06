@@ -49,3 +49,19 @@ func TestLexesTemplateLexemesHaveCorrectTokenValue(t *testing.T) {
 		t.Error("Expected third emitted token to be closing delimeter.")
 	}
 }
+
+func TestUnclosedTemplateEmitsErrorToken(t *testing.T) {
+	myLexer := lexer.Lex("name", "{{hello")
+	eme := myLexer.NextLexeme()
+	if eme.Token != "{{" {
+		t.Error("Expected first emitted token to be opening delimeter")
+	}
+	eme2 := myLexer.NextLexeme()
+	if eme2.Token != "hello" {
+		t.Error("Expected second emitted token to be `hello`.")
+	}
+	eme3 := myLexer.NextLexeme()
+	if eme3.Error == false {
+		t.Error("Expected third emitted token to be erroneous.")
+	}
+}
