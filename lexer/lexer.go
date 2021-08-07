@@ -46,8 +46,7 @@ func lexText(l *lexer) stateFn {
 			}
 			return lexLeftMeta // return next state
 		}
-		nextchar := l.next()
-		if nextchar == eof {
+		if l.next() == eof {
 			l.emit(false)
 			break
 		}
@@ -83,7 +82,7 @@ func lexInsideTemplate(l *lexer) stateFn {
 func (l *lexer) next() (rune rune) {
 	if l.pos == len(l.input) {
 		l.width = 0
-		return '_'
+		return eof
 	}
 	rune, l.width = utf8.DecodeRuneInString(l.input[l.pos:])
 	l.pos += l.width
