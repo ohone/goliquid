@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"errors"
 	"strings"
 	"unicode/utf8"
 )
@@ -8,6 +9,8 @@ import (
 const openDelimeter = "{{"
 const closeDelimeter = "}}"
 const eof = '_'
+
+var ErrEof = errors.New("reached end of file")
 
 type Lexeme struct {
 	Templatable bool
@@ -17,13 +20,14 @@ type Lexeme struct {
 
 type stateFn func(*lexer) stateFn
 type lexer struct {
-	name  string
-	input string      // string being scanned
-	start int         // start position of this item
-	pos   int         // current position in the input
-	width int         // width of the last run read
-	items chan Lexeme // channel of scanned items
-	state stateFn
+	name      string
+	input     string      // string being scanned
+	start     int         // start position of this item
+	pos       int         // current position in the input
+	width     int         // width of the last run read
+	items     chan Lexeme // channel of scanned items
+	state     stateFn
+	completed bool // wheter the lexer has completed
 }
 
 func lexLeftMeta(l *lexer) stateFn {
@@ -51,6 +55,7 @@ func lexText(l *lexer) stateFn {
 			break
 		}
 	}
+	l.completed = true
 	return nil
 }
 
@@ -116,21 +121,10 @@ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
 	return nil
 }
 
-// skip current char set
-func (l *lexer) ignore() {
-	l.start = l.pos
-}
-
 // go back one rune
 // should revert a next
 func (l *lexer) backup() {
 	l.pos -= l.width
-}
-
-func (l *lexer) peek() rune {
-	rune := l.next()
-	l.backup()
-	return rune
 }
 
 func (l *lexer) emit(template bool) {
@@ -138,13 +132,16 @@ func (l *lexer) emit(template bool) {
 	l.start = l.pos                                            // update position
 }
 
-// Get the next lexeme from the text.
-func (l *lexer) NextLexeme() Lexeme {
+// Get the next lexeme from the text, or error.
+func (l *lexer) NextLexeme() (*Lexeme, error) {
 	for {
 		select {
 		case lexeme := <-l.items: // if item can be recieved from channel (will halt here if nothing to recieve)
-			return lexeme // return item from channel, deliver to caller
+			return &lexeme, nil // return item from channel, deliver to caller
 		default: // if item can't be recieved from channel, do lex iteration (may generate token)
+			if l.completed {
+				return nil, ErrEof
+			}
 			l.state = l.state(l)
 		}
 	}
