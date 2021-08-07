@@ -10,7 +10,7 @@ func TestLexesString(t *testing.T) {
 	const strVal = "stringlol"
 	b := lexer.Lex("name", strVal)
 	eme, _ := b.NextLexeme()
-	if eme.Templatable {
+	if eme.Type == lexer.ItemTemplatable {
 		t.Error("Raw text should not be templatable.")
 	}
 	if eme.Token != strVal {
@@ -21,15 +21,15 @@ func TestLexesString(t *testing.T) {
 func TestLexesTemplateLexemesHaveCorrectTemplatability(t *testing.T) {
 	myLexer := lexer.Lex("name", "{{hello}}")
 	eme, _ := myLexer.NextLexeme()
-	if eme.Templatable {
+	if eme.Type == lexer.ItemTemplatable {
 		t.Error("Opening delimeter shouldn't be templatable.")
 	}
 	eme2, _ := myLexer.NextLexeme()
-	if !eme2.Templatable {
+	if eme2.Type != lexer.ItemTemplatable {
 		t.Error("Contents of template delimeters should be templatable.")
 	}
 	eme3, _ := myLexer.NextLexeme()
-	if eme3.Templatable {
+	if eme3.Type == lexer.ItemTemplatable {
 		t.Error("Closing delimeter shouldn't be templatable.")
 	}
 }
@@ -61,7 +61,17 @@ func TestUnclosedTemplateEmitsErrorToken(t *testing.T) {
 		t.Error("Expected second emitted token to be `hello`.")
 	}
 	eme3, _ := myLexer.NextLexeme()
-	if eme3.Error == false {
+	if eme3.Type != lexer.ItemError {
+		t.Error("Expected third emitted token to be erroneous.")
+	}
+}
+
+func TestErrEofReturnedAfterLexicalError(t *testing.T) {
+	myLexer := lexer.Lex("name", "{{hello")
+	myLexer.NextLexeme()
+	myLexer.NextLexeme()
+	eme3, _ := myLexer.NextLexeme()
+	if eme3.Type != lexer.ItemError {
 		t.Error("Expected third emitted token to be erroneous.")
 	}
 }

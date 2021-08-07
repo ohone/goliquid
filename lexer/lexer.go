@@ -12,10 +12,19 @@ const eof = '_'
 
 var ErrEof = errors.New("reached end of file")
 
+type LexemeType int
+
+const (
+	ItemError LexemeType = iota
+	ItemString
+	ItemOpen
+	ItemClose
+	ItemTemplatable
+)
+
 type Lexeme struct {
-	Templatable bool
-	Token       string
-	Error       bool
+	Token string
+	Type  LexemeType
 }
 
 type stateFn func(*lexer) stateFn
@@ -32,13 +41,13 @@ type lexer struct {
 
 func lexLeftMeta(l *lexer) stateFn {
 	l.pos += len(openDelimeter)
-	l.emit(false)
+	l.emit(ItemOpen)
 	return lexInsideTemplate // {{}}
 }
 
 func lexRightMeta(l *lexer) stateFn {
 	l.pos += len(closeDelimeter)
-	l.emit(false)
+	l.emit(ItemClose)
 	return lexText
 }
 
@@ -46,12 +55,12 @@ func lexText(l *lexer) stateFn {
 	for { // loop
 		if strings.HasPrefix(l.input[l.pos:], openDelimeter) { // if we're starting a token
 			if l.pos > l.start { // emit previous tokens as plain text
-				l.emit(false)
+				l.emit(ItemString)
 			}
 			return lexLeftMeta // return next state
 		}
 		if l.next() == eof {
-			l.emit(false)
+			l.emit(ItemString)
 			break
 		}
 	}
@@ -73,12 +82,12 @@ func lexInsideTemplate(l *lexer) stateFn {
 
 	// if we haven't hit a close delimeter
 	if !strings.HasPrefix(l.input[l.pos:], closeDelimeter) {
-		l.emit(true)
+		l.emit(ItemTemplatable)
 		return l.errorf("object template must finish with closing delimeter `}}`")
 	}
 
 	// emit templateable token
-	l.emit(true)
+	l.emit(ItemTemplatable)
 
 	// lex close delimeter
 	return lexRightMeta
@@ -115,9 +124,10 @@ func (l *lexer) acceptRun(charset string) {
 
 // Error token on the channel, nil function.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items <- Lexeme{
-		Error: true,
-	}
+	var myLexeme Lexeme
+	myLexeme.Type = ItemError
+	l.items <- myLexeme
+	l.completed = true
 	return nil
 }
 
@@ -127,9 +137,9 @@ func (l *lexer) backup() {
 	l.pos -= l.width
 }
 
-func (l *lexer) emit(template bool) {
-	l.items <- Lexeme{template, l.input[l.start:l.pos], false} // send token to parser
-	l.start = l.pos                                            // update position
+func (l *lexer) emit(lt LexemeType) {
+	l.items <- Lexeme{l.input[l.start:l.pos], lt} // send token to parser
+	l.start = l.pos                               // update position
 }
 
 // Get the next lexeme from the text, or error.
