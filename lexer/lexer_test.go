@@ -1,16 +1,14 @@
-package main
+package lexer
 
 import (
 	"testing"
-
-	"github.com/ohone/goliquid/lexer"
 )
 
 func TestLexesString(t *testing.T) {
 	const strVal = "stringlol"
-	b := lexer.Lex("name", strVal)
+	b := Lex("name", strVal)
 	eme, _ := b.NextLexeme()
-	if eme.Type == lexer.ItemTemplatable {
+	if eme.Type == ItemTemplatable {
 		t.Error("Raw text should not be templatable.")
 	}
 	if eme.Token != strVal {
@@ -19,23 +17,23 @@ func TestLexesString(t *testing.T) {
 }
 
 func TestLexesTemplateLexemesHaveCorrectTemplatability(t *testing.T) {
-	myLexer := lexer.Lex("name", "{{hello}}")
+	myLexer := Lex("name", "{{hello}}")
 	eme, _ := myLexer.NextLexeme()
-	if eme.Type == lexer.ItemTemplatable {
+	if eme.Type == ItemTemplatable {
 		t.Error("Opening delimeter shouldn't be templatable.")
 	}
 	eme2, _ := myLexer.NextLexeme()
-	if eme2.Type != lexer.ItemTemplatable {
+	if eme2.Type != ItemTemplatable {
 		t.Error("Contents of template delimeters should be templatable.")
 	}
 	eme3, _ := myLexer.NextLexeme()
-	if eme3.Type == lexer.ItemTemplatable {
+	if eme3.Type == ItemTemplatable {
 		t.Error("Closing delimeter shouldn't be templatable.")
 	}
 }
 
 func TestLexesTemplateLexemesHaveCorrectTokenValue(t *testing.T) {
-	myLexer := lexer.Lex("name", "{{hello}}")
+	myLexer := Lex("name", "{{hello}}")
 	eme, _ := myLexer.NextLexeme()
 	if eme.Token != "{{" {
 		t.Error("Expected first emitted token to be opening delimeter")
@@ -51,7 +49,7 @@ func TestLexesTemplateLexemesHaveCorrectTokenValue(t *testing.T) {
 }
 
 func TestUnclosedTemplateEmitsErrorToken(t *testing.T) {
-	myLexer := lexer.Lex("name", "{{hello")
+	myLexer := Lex("name", "{{hello")
 	eme, _ := myLexer.NextLexeme()
 	if eme.Token != "{{" {
 		t.Error("Expected first emitted token to be opening delimeter")
@@ -61,33 +59,33 @@ func TestUnclosedTemplateEmitsErrorToken(t *testing.T) {
 		t.Error("Expected second emitted token to be `hello`.")
 	}
 	eme3, _ := myLexer.NextLexeme()
-	if eme3.Type != lexer.ItemError {
+	if eme3.Type != ItemError {
 		t.Error("Expected third emitted token to be erroneous.")
 	}
 }
 
 func TestErrEofReturnedAfterLexicalError(t *testing.T) {
-	myLexer := lexer.Lex("name", "{{hello")
+	myLexer := Lex("name", "{{hello")
 	myLexer.NextLexeme()
 	myLexer.NextLexeme()
 	eme3, _ := myLexer.NextLexeme()
-	if eme3.Type != lexer.ItemError {
+	if eme3.Type != ItemError {
 		t.Error("Expected third emitted token to be erroneous.")
 	}
 }
 
 func TestErrEofReturnedOnEof(t *testing.T) {
-	myLexer := lexer.Lex("name", "string")
+	myLexer := Lex("name", "string")
 	myLexer.NextLexeme()
 
 	_, err := myLexer.NextLexeme()
-	if err != lexer.ErrEof {
+	if err != ErrEof {
 		t.Error("Expected ErrEof to be thrown when eof reached.")
 	}
 }
 
 func TestNilPointerReturnedOnEof(t *testing.T) {
-	myLexer := lexer.Lex("name", "string")
+	myLexer := Lex("name", "string")
 	myLexer.NextLexeme()
 
 	ptr, _ := myLexer.NextLexeme()
