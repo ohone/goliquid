@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"errors"
 	"strings"
 	"unicode/utf8"
 )
@@ -9,32 +10,44 @@ const openDelimeter = "{{"
 const closeDelimeter = "}}"
 const eof = '_'
 
+var ErrEof = errors.New("reached end of file")
+
+type LexemeType int
+
+const (
+	ItemError LexemeType = iota
+	ItemString
+	ItemOpen
+	ItemClose
+	ItemTemplatable
+)
+
 type Lexeme struct {
-	Templatable bool
-	Token       string
-	Error       bool
+	Token string
+	Type  LexemeType
 }
 
 type stateFn func(*lexer) stateFn
 type lexer struct {
-	name  string
-	input string      // string being scanned
-	start int         // start position of this item
-	pos   int         // current position in the input
-	width int         // width of the last run read
-	items chan Lexeme // channel of scanned items
-	state stateFn
+	name      string
+	input     string      // string being scanned
+	start     int         // start position of this item
+	pos       int         // current position in the input
+	width     int         // width of the last run read
+	items     chan Lexeme // channel of scanned items
+	state     stateFn
+	completed bool // wheter the lexer has completed
 }
 
 func lexLeftMeta(l *lexer) stateFn {
 	l.pos += len(openDelimeter)
-	l.emit(false)
+	l.emit(ItemOpen)
 	return lexInsideTemplate // {{}}
 }
 
 func lexRightMeta(l *lexer) stateFn {
 	l.pos += len(closeDelimeter)
-	l.emit(false)
+	l.emit(ItemClose)
 	return lexText
 }
 
@@ -42,15 +55,16 @@ func lexText(l *lexer) stateFn {
 	for { // loop
 		if strings.HasPrefix(l.input[l.pos:], openDelimeter) { // if we're starting a token
 			if l.pos > l.start { // emit previous tokens as plain text
-				l.emit(false)
+				l.emit(ItemString)
 			}
 			return lexLeftMeta // return next state
 		}
 		if l.next() == eof {
-			l.emit(false)
+			l.emit(ItemString)
 			break
 		}
 	}
+	l.completed = true
 	return nil
 }
 
@@ -68,12 +82,12 @@ func lexInsideTemplate(l *lexer) stateFn {
 
 	// if we haven't hit a close delimeter
 	if !strings.HasPrefix(l.input[l.pos:], closeDelimeter) {
-		l.emit(true)
+		l.emit(ItemTemplatable)
 		return l.errorf("object template must finish with closing delimeter `}}`")
 	}
 
 	// emit templateable token
-	l.emit(true)
+	l.emit(ItemTemplatable)
 
 	// lex close delimeter
 	return lexRightMeta
@@ -110,15 +124,11 @@ func (l *lexer) acceptRun(charset string) {
 
 // Error token on the channel, nil function.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items <- Lexeme{
-		Error: true,
-	}
+	var myLexeme Lexeme
+	myLexeme.Type = ItemError
+	l.items <- myLexeme
+	l.completed = true
 	return nil
-}
-
-// skip current char set
-func (l *lexer) ignore() {
-	l.start = l.pos
 }
 
 // go back one rune
@@ -127,24 +137,21 @@ func (l *lexer) backup() {
 	l.pos -= l.width
 }
 
-func (l *lexer) peek() rune {
-	rune := l.next()
-	l.backup()
-	return rune
+func (l *lexer) emit(lt LexemeType) {
+	l.items <- Lexeme{l.input[l.start:l.pos], lt} // send token to parser
+	l.start = l.pos                               // update position
 }
 
-func (l *lexer) emit(template bool) {
-	l.items <- Lexeme{template, l.input[l.start:l.pos], false} // send token to parser
-	l.start = l.pos                                            // update position
-}
-
-// Get the next lexeme from the text.
-func (l *lexer) NextLexeme() Lexeme {
+// Get the next lexeme from the text, or error.
+func (l *lexer) NextLexeme() (*Lexeme, error) {
 	for {
 		select {
 		case lexeme := <-l.items: // if item can be recieved from channel (will halt here if nothing to recieve)
-			return lexeme // return item from channel, deliver to caller
+			return &lexeme, nil // return item from channel, deliver to caller
 		default: // if item can't be recieved from channel, do lex iteration (may generate token)
+			if l.completed {
+				return nil, ErrEof
+			}
 			l.state = l.state(l)
 		}
 	}
